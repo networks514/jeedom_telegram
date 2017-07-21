@@ -4,7 +4,7 @@ Le plugin ne comporte pas de configuration générale.
 
 Sur la page santé, un test pour vérifier le https en connexion externe est fait. Il n'est pas possible en l'état d'utiliser un certificat autosigné.
 
-Un certification letsencrypt fonctionne (en ayant bien paramétrer le certificat de chaine également)
+Un certificat letsencrypt fonctionne (en ayant bien paramétrer le certificat de chaine également)
 
 ==== Configuration d'un équipement
 
@@ -14,7 +14,7 @@ Vous devez donc rentrer la clef fournie par Telegram à la création du bot sur 
 
 Vous pouvez configurer le bot pour créer des notifications silencieuses sur les téléphones
 
-Il est possible de personnaliser le texte que le bot répond à un message
+Il est possible de personnaliser le texte que le bot répond à un message et le format par défaut des messages du bot
 
 Vous pouvez également préciser un emplacement pour stocker les fichiers envoyés au bot. Dans ce cas les fichiers seront créés suivant le format :
 
@@ -24,23 +24,29 @@ Vous pouvez également préciser un emplacement pour stocker les fichiers envoy�
 
 - document : nom du fichier envoyé
 
-Par la suite, les utilisateurs entrant en communication avec le bot créeront automatiquement une entrée sur l'équipement pour envoyer des messages
+Par la suite, les utilisateurs entrant en communication avec le bot créeront automatiquement une entrée sur l'équipement pour envoyer des messages si l'option est activée
 
-Pareil pour les groupes et le ask marche sur les groupes
+Pareil pour les groupes et le ask marche sur les groupes (il ne marche pas pour le destinataire "Tous")
 
 ==== Envoyer des messages
 
-Par défaut, pour une commande action il est possible de faire les types d'envoi :
+Les commandes actions permettent d'envoyer des messages. Il est possible de fournir des options pour les messages
 
-- tts : en précisant "tts" en titre, le message doit être le chemin d'un fichier audio de type ogg encodé avec opus qui sera notifié en message vocal dans Telegram (sinon un texte mais opus-tools doit être installé)
+- tts : la valeur doit être le chemin d'un fichier audio de type ogg encodé avec opus qui sera notifié en message vocal dans Telegram (sinon un texte mais opus-tools doit être installé)
 
-- location : en précisant "location" en titre, le message doit être soit "geoloc:idEqGeoloc" soit "latitude,longitude"
+- location : la valeur doit être soit une commande geoloc soit "latitude,longitude"
 
-- file : en précisant "file" en titre, le message doit être le path d'un fichier
+- file : la valeur doit être le path d'un ou plusieurs fichiers
 
-- texte dans le reste des cas
+- message : permet d'envoyer un message dans le même ordre
 
-Toutes les pièces jointes ajoutées à une commande action sont envoyées :
+- notify : valeur binaire pour que la notif soit silencieuse (0) ou avec son/vibrationn (1)
+
+- parse_mode : format du message envoyé (correspon à l'option de conf équipement), valeurs possibles : '', HTML, Markdown
+
+Exemple : tts=/fichier.ogg message=detection file=/screen1.png,/screen2.png notify=0
+
+Toutes les pièces jointes ajoutées à une commande action sont envoyées avec un type détecté par rapport à leur extension :
 
 - vidéos en extensions "avi,mpeg,mpg,mkv,mp4,mpe"
 

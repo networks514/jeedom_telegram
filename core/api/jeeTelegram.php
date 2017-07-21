@@ -15,12 +15,12 @@
  * You should have received a copy of the GNU General Public License
  * along with Jeedom. If not, see <http://www.gnu.org/licenses/>.
  */
-header('Content-type: application/json');
+header("Content-Type: application/json");
 require_once dirname(__FILE__) . "/../../../../core/php/core.inc.php";
 
 if (!jeedom::apiAccess(init('apikey'), 'telegram')) {
- echo __('Clef API non valide, vous n\'êtes pas autorisé à effectuer cette action (telegram)', __FILE__);
- die();
+	echo __('Clef API non valide, vous n\'êtes pas autorisé à effectuer cette action (telegram)', __FILE__);
+	die();
 }
 
 $content = file_get_contents('php://input');
@@ -37,143 +37,137 @@ if (!is_object($eqLogic)) {
 $parameters = array();
 
 if ($json["message"]["chat"]["type"] == 'private') {
-    if (isset($json["message"]["from"]["username"])) {
-    	$username = $json["message"]["from"]["username"];
-    } else {
-    	$username = $json["message"]["from"]["first_name"];
-    }
+	$username = isset($json["message"]["from"]["username"]) ? $json["message"]["from"]["username"] : $json["message"]["from"]["first_name"];
 } else if ($json["message"]["chat"]["type"] == 'group') {
-    $username = $json["message"]["chat"]["title"];
+	$username = $json["message"]["chat"]["title"];
 } else {
-    log::add('telegram', 'debug', 'Message non supporté');
-    return;
+	log::add('telegram', 'debug', 'Message non supporté');
+	die();
 }
 log::add('telegram', 'debug', 'Recu message de ' . $username);
-$username = strtolower(strtr(utf8_decode($username), utf8_decode('ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝßàáâãäåæçèéêëìíîïñòóôõöøùúûüýÿĀāĂăĄąĆćĈĉĊċČčĎďĐđĒēĔĕĖėĘęĚěĜĝĞğĠġĢģĤĥĦħĨĩĪīĬĭĮįİıĲĳĴĵĶķĹĺĻļĽľĿŀŁłŃńŅņŇňŉŌōŎŏŐőŒœŔŕŖŗŘřŚśŜŝŞşŠšŢţŤťŦŧŨũŪūŬŭŮůŰűŲųŴŵŶŷŸŹźŻżŽžſƒƠơƯưǍǎǏǐǑǒǓǔǕǖǗǘǙǚǛǜǺǻǼǽǾǿ'), 'AAAAAAAECEEEEIIIIDNOOOOOOUUUUYsaaaaaaaeceeeeiiiinoooooouuuuyyAaAaAaCcCcCcCcDdDdEeEeEeEeEeGgGgGgGgHhHhIiIiIiIiIiIJijJjKkLlLlLlLlllNnNnNnnOoOoOoOEoeRrRrRrSsSsSsSsTtTtTtUuUuUuUuUuUuWwYyYZzZzZzsfOoUuAaIiOoUuUuUuUuUuAaAEaeOo'));
-$user = user::byLogin($username);
-if (is_object($user)) {
-    $parameters['profile'] = $username;
-}
 
 foreach ($eqLogic->getCmd('action') as $cmd) {
-	if ($json["message"]["chat"]["id"] == $cmd->getConfiguration('chatid') && $cmd->getCache('storeVariable', 'none') != 'none') {
-		$dataStore = new dataStore();
-		$dataStore->setType('scenario');
-		$dataStore->setKey($cmd->getCache('storeVariable', 'none'));
-		$dataStore->setValue($json["message"]["text"]);
-		$dataStore->setLink_id(-1);
-		$dataStore->save();
-		$cmd->setCache('storeVariable', 'none');
-		$cmd->save();
+	if ($cmd->askResponse($json["message"]["text"])) {
 		echo json_encode(array('text' => ''));
-		return;
+		die();
+	}
+}
+
+$cmd_user = $eqLogic->getCmd('action', $json["message"]["chat"]["id"]);
+if (is_object($cmd_user)) {
+	$parameters['reply_cmd'] = $cmd_user;
+	$user = user::byId($cmd_user->getConfiguration('user'));
+	if (is_object($user)) {
+		$parameters['profile'] = $user->getLogin();
 	}
 }
 
 $eqLogic->checkAndUpdateCmd('sender', trim($json["message"]["from"]["id"]));
 $eqLogic->checkAndUpdateCmd('chat', trim($json["message"]["chat"]["id"]));
+$interactAnswer = 0;
 if (isset($json["message"]["text"])) {
-    $eqLogic->checkAndUpdateCmd('text', $json["message"]["text"]);
+	$eqLogic->checkAndUpdateCmd('text', $json["message"]["text"]);
+	if (!is_object($cmd_user)) {
+		if ($eqLogic->getConfiguration('isAccepting') != 1) {
+			die();
+		}
+		$cmd_user = new telegramCmd();
+		$cmd_user->setLogicalId($json["message"]["chat"]["id"]);
+		$cmd_user->setIsVisible(1);
+		$cmd_user->setName($username . ' - ' . $json["message"]["chat"]["id"]);
+		$cmd_user->setConfiguration('interact', 1);
+		$cmd_user->setConfiguration('chatid', $json["message"]["chat"]["id"]);
+		$cmd_user->setType('action');
+		$cmd_user->setSubType('message');
+		$cmd_user->setEqLogic_id($eqLogic->getId());
+		$cmd_user->setDisplay('title_placeholder', __('Options', __FILE__));
+	}
+	if (isset($json["message"]["chat"]["title"])) {
+		$cmd_user->setConfiguration('title', $json["message"]["chat"]["title"]);
+	} else {
+		if (isset($json["message"]["from"]["username"])) {
+			$cmd_user->setConfiguration('username', $json["message"]["from"]["username"]);
+		}
+		if (isset($json["message"]["from"]["first_name"])) {
+			$cmd_user->setConfiguration('last_name', $json["message"]["from"]["first_name"]);
+		}
+		if (isset($json["message"]["from"]["last_name"])) {
+			$cmd_user->setConfiguration('last_name', $json["message"]["from"]["last_name"]);
+		}
+	}
+	$cmd_user->save();
+	if (isset($json["message"]["reply_to_message"])) {
+		die();
+	}
 
-    $cmd_user = $eqLogic->getCmd('action', $json["message"]["chat"]["id"]);
-    if (!is_object($cmd_user)) {
-    	if ($eqLogic->getConfiguration('isAccepting') == 1) {
-    		$cmd_user = new telegramCmd();
-    		$cmd_user->setLogicalId($json["message"]["chat"]["id"]);
-    		$cmd_user->setIsVisible(1);
-    		$cmd_user->setName($username . ' - ' . $json["message"]["chat"]["id"]);
-    		$cmd_user->setConfiguration('interact',0);
-    		$cmd_user->setConfiguration('chatid',$json["message"]["chat"]["id"]);
-    		$cmd_user->setType('action');
-    		$cmd_user->setSubType('message');
-    		$cmd_user->setEqLogic_id($eqLogic->getId());
-    	} else {
-    		return;
-    	}
-    }
-    if (isset($json["message"]["chat"]["title"])) {
-    	$cmd_user->setConfiguration('title',$json["message"]["chat"]["title"]);
-    	$cmd_user->save();
-    } else {
-        if (isset($json["message"]["from"]["username"])) {
-        	$cmd_user->setConfiguration('username',$json["message"]["from"]["username"]);
-        	$cmd_user->save();
-        }
-        if (isset($json["message"]["from"]["first_name"])) {
-            $cmd_user->setConfiguration('last_name',$json["message"]["from"]["first_name"]);
-        }
-        if (isset($json["message"]["from"]["last_name"])) {
-            $cmd_user->setConfiguration('last_name',$json["message"]["from"]["last_name"]);
-        }
-    }
-    $cmd_user->save();
-
-    if (isset($json["message"]["reply_to_message"])) {
-    	return;
-    }
-
-    if ($cmd_user->getConfiguration('interact') == 1) {
-    	$reply = interactQuery::tryToReply(trim($json["message"]["text"]), $parameters);
-    } else {
-    	$reply = $eqLogic->getConfiguration('reply', 'Message recu');
-    }
-    $file_id = '';
-}
-if (isset($json["message"]["document"])) {
-    $file_id = $json["message"]["document"]["file_id"];
-    $file_name = $json["message"]["document"]["file_name"];
-    $reply = $eqLogic->getConfiguration('reply', 'Message recu') . ' (Document)';
-}
-if (isset($json["message"]["photo"])) {
-    $file_id = $json["message"]["photo"]["file_id"];
-    $file_name = $username . '.png';
-    $reply = $eqLogic->getConfiguration('reply', 'Message recu') . ' (Photo)';
-}
-if (isset($json["message"]["video"])) {
-    $file_id = $json["message"]["video"]["file_id"];
-    $file_name = $username . '.mp4';
-    $reply = $eqLogic->getConfiguration('reply', 'Message recu') . ' (Vidéo)';
-}
-if (isset($json["message"]["location"])) {
-    $file_id = '';
-    $cmd_user = $eqLogic->getCmd('action', $json["message"]["chat"]["id"]);
-    if (is_object($cmd_user)) {
-        $geoloc = str_replace('#','',$cmd_user->getConfiguration('cmdgeoloc', ''));
-        //log::add('telegram', 'debug', $geoloc);
-        $geolocCmd = geolocCmd::byId($geoloc);
-        if (is_object($geolocCmd)) {
-            $geolocCmd->event($json["message"]["location"]["latitude"] . ',' . $json["message"]["location"]["longitude"]);
-            $geolocCmd->save();
-        }
-    }
-    $reply = $eqLogic->getConfiguration('reply', 'Message recu') . ' (Localisation)';
+  if ($cmd_user->getConfiguration('interact') == 1) {
+		$interactAnswer = 1;
+		$parameters['plugin'] = 'telegram';
+		$reply = interactQuery::tryToReply(trim($json["message"]["text"]), $parameters);
+	} else {
+		$reply['reply'] = $eqLogic->getConfiguration('reply', 'Message recu');
+	}
+	$file_id = '';
+} else if (isset($json["message"]["document"])) {
+	$file_id = $json["message"]["document"]["file_id"];
+	$file_name = $json["message"]["document"]["file_name"];
+	$reply['reply'] = $eqLogic->getConfiguration('reply', 'Message recu') . ' (Document)';
+} else if (isset($json["message"]["photo"])) {
+	$file_id = $json["message"]["photo"]["file_id"];
+	$file_name = $username . '.png';
+	$reply['reply'] = $eqLogic->getConfiguration('reply', 'Message recu') . ' (Photo)';
+} else if (isset($json["message"]["video"])) {
+	$file_id = $json["message"]["video"]["file_id"];
+	$file_name = $username . '.mp4';
+	$reply['reply'] = $eqLogic->getConfiguration('reply', 'Message recu') . ' (Vidéo)';
+} else if (isset($json["message"]["location"])) {
+	$file_id = '';
+	$cmd_user = $eqLogic->getCmd('action', $json["message"]["chat"]["id"]);
+	if (is_object($cmd_user)) {
+		$geoloc = str_replace('#', '', $cmd_user->getConfiguration('cmdgeoloc', ''));
+		$geolocCmd = geolocCmd::byId($geoloc);
+		if (is_object($geolocCmd)) {
+			$geolocCmd->event($json["message"]["location"]["latitude"] . ',' . $json["message"]["location"]["longitude"]);
+			$geolocCmd->save();
+		}
+	}
+	$reply['reply'] = $eqLogic->getConfiguration('reply', 'Message recu') . ' (Localisation)';
 }
 
-$answer = array('method' => 'sendMessage', 'chat_id' => $json["message"]["chat"]["id"], "reply_to_message_id" => $json["message"]["message_id"], "text" => $reply);
-header("Content-Type: application/json");
-echo json_encode($answer);
-
-if ($file_id != '' && $eqLogic->getConfiguration('savepath','') != '') {
-    $url = "https://api.telegram.org/bot" . trim($eqLogic->getConfiguration('bot_token')) . '/getFile';
-    $post_fields['file_id'] = $file_id;
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-    curl_setopt($ch, CURLOPT_POST, 1);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $post_fields);
-    $output = json_decode(curl_exec($ch), true);
-    $local_file_path = $eqLogic->getConfiguration('savepath') . '/' . $file_name;
-    $file_url = "https://api.telegram.org/file/bot" . trim($eqLogic->getConfiguration('bot_token')) . "/" . $output["result"]["file_path"];
-    $in = fopen($file_url, "rb");
-    $out = fopen($local_file_path, "wb");
-    while ($chunk = fread($in, 8192)) {
-        fwrite($out, $chunk, 8192);
-    }
-    fclose($in);
-    fclose($out);
-    $eqLogic->checkAndUpdateCmd('text', 'file:' . $local_file_path);
+if (!$eqLogic->getConfiguration('noreply', 0) || $interactAnswer == 1) {
+	$answer = array(
+		'method' => 'sendMessage',
+		'chat_id' => $json['message']['chat']['id'],
+		'text' => $reply['reply'],
+	);
+	echo json_encode($answer);
 }
 
-return true;
+if (isset($reply['file']) && count($reply['file']) > 0) {
+	if (!is_array($reply['file'])) {
+		$reply['file'] = array($reply['file']);
+	}
+	$cmd_user->execCmd(array('files' => $reply['file']));
+}
 
-?>
+if ($file_id != '' && $eqLogic->getConfiguration('savepath', '') != '') {
+	$url = "https://api.telegram.org/bot" . trim($eqLogic->getConfiguration('bot_token')) . '/getFile';
+	$post_fields['file_id'] = $file_id;
+	$ch = curl_init();
+	curl_setopt($ch, CURLOPT_URL, $url);
+	curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+	curl_setopt($ch, CURLOPT_POST, 1);
+	curl_setopt($ch, CURLOPT_POSTFIELDS, $post_fields);
+	$output = json_decode(curl_exec($ch), true);
+	$local_file_path = $eqLogic->getConfiguration('savepath') . '/' . $file_name;
+	$file_url = "https://api.telegram.org/file/bot" . trim($eqLogic->getConfiguration('bot_token')) . "/" . $output["result"]["file_path"];
+	$in = fopen($file_url, "rb");
+	$out = fopen($local_file_path, "wb");
+	while ($chunk = fread($in, 8192)) {
+		fwrite($out, $chunk, 8192);
+	}
+	fclose($in);
+	fclose($out);
+	$eqLogic->checkAndUpdateCmd('text', 'file:' . $local_file_path);
+}
+die();
